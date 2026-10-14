@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+# Use the configured project toolchain without changing global shell settings.
+if [ -x "$task_root/.tooling/flutter/bin/flutter" ]; then
+  task_flutter="$task_root/.tooling/flutter/bin/flutter"
+  export PUB_CACHE=${PUB_CACHE:-"$task_root/.tooling/pub-cache"}
+elif command -v flutter >/dev/null 2>&1; then
+  task_flutter=$(command -v flutter)
+elif [ -x /private/tmp/rangebuddy-flutter-sdk/bin/flutter ]; then
+  task_flutter=/private/tmp/rangebuddy-flutter-sdk/bin/flutter
+  export PUB_CACHE=${PUB_CACHE:-/private/tmp/rangebuddy-pub-cache}
+else
+  echo 'Flutter is not installed. See https://docs.flutter.dev/install' >&2
+  exit 1
+fi
+
+if [ -d "$task_root/.tooling/android-sdk" ]; then
+  export ANDROID_HOME="$task_root/.tooling/android-sdk"
+  export ANDROID_SDK_ROOT="$ANDROID_HOME"
+fi
+if [ -x /Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin/java ]; then
+  export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+fi
+export GRADLE_USER_HOME=${GRADLE_USER_HOME:-"$task_root/.tooling/gradle-cache"}
+export PATH="$(dirname -- "$task_flutter"):$task_root/.tooling/android-sdk/platform-tools:$PATH"
+
+export FLUTTER_SUPPRESS_ANALYTICS=true
+export DART_SUPPRESS_ANALYTICS=true
+exec "$task_flutter" "$@"

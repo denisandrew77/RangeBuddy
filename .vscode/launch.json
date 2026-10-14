@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RangeBuddy — Android (debug)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "RangeBuddy — Web (local)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "deviceId": "web-server",
+      "flutterMode": "debug",
+      "toolArgs": ["--web-hostname", "127.0.0.1", "--web-port", "8081"]
+    }
+  ]
+}

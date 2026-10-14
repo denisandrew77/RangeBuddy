@@ -1,0 +1,35 @@
+{
+  "dart.flutterSdkPath": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/flutter",
+  "dart.env": {
+    "ANDROID_HOME": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/android-sdk",
+    "ANDROID_SDK_ROOT": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/android-sdk",
+    "JAVA_HOME": "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home",
+    "PUB_CACHE": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/pub-cache",
+    "GRADLE_USER_HOME": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/gradle-cache",
+    "FLUTTER_SUPPRESS_ANALYTICS": "true",
+    "DART_SUPPRESS_ANALYTICS": "true"
+  },
+  "dart.analysisExcludedFolders": [
+    ".tooling",
+    "build"
+  ],
+  "files.watcherExclude": {
+    "**/.tooling/**": true
+  },
+  "files.exclude": {
+    ".tooling": true
+  },
+  "search.exclude": {
+    "**/.tooling/**": true
+  },
+  "terminal.integrated.env.osx": {
+    "ANDROID_HOME": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/android-sdk",
+    "ANDROID_SDK_ROOT": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/android-sdk",
+    "JAVA_HOME": "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home",
+    "PUB_CACHE": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/pub-cache",
+    "GRADLE_USER_HOME": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/gradle-cache",
+    "FLUTTER_SUPPRESS_ANALYTICS": "true",
+    "DART_SUPPRESS_ANALYTICS": "true",
+    "PATH": "/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/flutter/bin:/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/android-sdk/platform-tools:/Users/denisdamse/Documents/Projects/RangeBuddy/.tooling/android-sdk/cmdline-tools/latest/bin:${env:PATH}"
+  }
+}
