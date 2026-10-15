@@ -80,7 +80,7 @@ class _RangeBuddyAppState extends State<RangeBuddyApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'RangeBuddy',
+    title: 'DENICAR',
     locale: const Locale('ro', 'RO'),
     supportedLocales: const [Locale('ro', 'RO')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,

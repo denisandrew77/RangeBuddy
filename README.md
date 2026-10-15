@@ -82,3 +82,7 @@ The adapter treats HTTP 2xx as accepted, with no response-body contract yet. Cur
 The preview helper writes [setup](artifacts/previews/setup.png) and [home](artifacts/previews/home.png) screenshots. Tests cover setup, reopening, protected editing, baseline editing, validation, honest preview behavior, HTTP payloads/errors, failed persistence, duplicate submission prevention, and narrow/wide layouts.
 
 Read [Project Brain](project-brain/README.md) for the agreed specs, derived scenarios, architecture decisions, and open questions. Root [AGENTS.md](AGENTS.md) instructs future AI sessions to keep those files updated.
+
+## Launcher branding
+
+The Android and installed-web home-screen icon uses the supplied DENICAR logo and displays **DENICAR**. The original JPG is in `assets/branding/denicar.jpg`; regenerate the PNG resources with `sh tool/generate_launcher_icons.sh` (requires ImageMagick). Android adaptive icons include white padding to retain the full wordmark under launcher masks. Rebuild and reinstall/update the app to apply launcher changes; hot reload does not update them.

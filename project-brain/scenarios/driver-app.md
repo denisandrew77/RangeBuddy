@@ -1,7 +1,7 @@
 # Driver app scenarios
 
 Source: [Driver app spec](../specs/driver-app.md)
-Updated: 2026-10-14
+Updated: 2026-10-15
 
 All scenario definitions are ready. Implementation and verification evidence are tracked below. Client validation and preview cases exercise the documented implementation choices, not additional agreed domain rules.
 
@@ -73,6 +73,13 @@ Definition: ready | Implementation: built | Verification: passed (widget/data te
 
 Initially show starting kilometres as the current reading in the home header. A successful server entry updates the header and persists the reading across reopening. Preview, invalid input, and server failure leave it unchanged. If local saving fails, retain the old reading and inputs and explain the failure without inviting a repeated server submission. Baseline edits preserve an already recorded current reading.
 
+## SC-DRIVER-011 — DENICAR launcher identity
+
+Covers: R-DRIVER-013
+Definition: ready | Implementation: built | Verification: partial (resource checks; physical launcher not run)
+
+Build the Android APK and inspect its packaged application label and launcher resources. Expect DENICAR and icons derived from the supplied JPG, including adaptive resources on API 26+. Confirm the source JPG has moved from lib to assets/branding. Build web and inspect its manifest, PNG icon sizes, favicon, and installation title. Install/update on an Android phone and inspect the icon under supported launcher masks, then tap it to open the app. For web, install to the home screen and inspect the label/icon. Physical-launcher and installed-PWA verification remain separate from build/resource checks.
+
 ## Coverage
 
 | Requirement | Scenarios |
@@ -89,6 +96,7 @@ Initially show starting kilometres as the current reading in the home header. A 
 | R-DRIVER-010 | SC-DRIVER-009 |
 | R-DRIVER-011 | SC-DRIVER-005 |
 | R-DRIVER-012 | SC-DRIVER-010 |
+| R-DRIVER-013 | SC-DRIVER-011 |
 
 ## Verification evidence — 2026-10-14
 
@@ -111,3 +119,7 @@ Revision 2026-10-14: SC-DRIVER-003, SC-DRIVER-005, and SC-DRIVER-006 have change
 Latest execution — 2026-10-14: `./tool/flutterw test --no-pub` passed all 22 tests; `./tool/flutterw analyze --no-pub` reported no issues. SC-DRIVER-003 checks the price-per-litre preview and unchanged current reading. SC-DRIVER-005 checks wrong-password rejection, correct unlock, fresh authentication on revisit, persisted baseline, failed save, and preservation of an existing current reading. SC-DRIVER-006 checks numeric `pricePerLitre` HTTP serialization and removal of `totalPaid`. SC-DRIVER-010 checks initial baseline display, confirmed submission and reopening, unchanged reading on preview/server failure, legacy JSON loading, and the explicit local-save-failure message after successful delivery. Stores/services are injected or mocked; no real backend or physical-device persistence was exercised. The preview capture helper passed and the regenerated home image was inspected.
 
 Android compilation of this revision: `./tool/flutterw build apk --debug --no-pub` succeeded and generated `build/app/outputs/flutter-apk/app-debug.apk`. This verifies compilation, not a physical-device run.
+
+Launcher verification — 2026-10-15: source relocation, Android label/icon references, five legacy PNG density dimensions (48/72/96/144/192), adaptive-icon XML, and web manifest name/icon dimensions passed executable resource checks. `sh -n tool/generate_launcher_icons.sh` passed. Generated web launcher icon visually inspected: full supplied wordmark retained on white with padding. Physical Android launcher masks, update/reinstall behavior, and installed web home-screen behavior remain not run.
+
+Build verification — 2026-10-15: `./tool/flutterw build apk --debug --no-pub` and `./tool/flutterw build web --no-pub --no-web-resources-cdn` succeeded. `aapt dump badging` confirms the packaged application label DENICAR and adaptive launcher icon; ZIP inspection confirms foreground/icon resources. Compiled web manifest, PNG files, and document title checks passed. SC-DRIVER-011 remains partial pending actual home-screen installation/inspection.

@@ -1,6 +1,6 @@
 # Driver app
 
-Updated: 2026-10-14
+Updated: 2026-10-15
 Source: user's app description and follow-up answers in this conversation.
 Scenarios: [Driver app](../scenarios/driver-app.md)
 Architecture: [ADR-002](../adrs/ADR-002-flutter-client.md)
@@ -41,9 +41,13 @@ Van drivers record refuelling data for future server-side processing. The first 
 
 R-DRIVER-001 has successful web and Android debug builds; physical-device execution remains unverified because no phone is connected. R-DRIVER-005 has a tested preview and HTTP adapter; actual backend processing is deferred. R-DRIVER-007 has persistent local setup with no login guard or production logout; server session behavior remains deferred.
 
+| R-DRIVER-013 | Use the user-supplied DENICAR JPG as the launcher/home-screen icon and display DENICAR underneath it. Keep the source image in the asset folder. | agreed | built |
+
 ## Implementation choices for this delivery
 
 These are reversible client choices, not additional user-agreed domain rules:
+
+- Preserve the full supplied wordmark with white padding in density-specific Android legacy/adaptive icons and web home-screen icons; launcher naming also applies to web installation metadata. Package identifiers and local profile keys stay stable so this updates the existing app. In-app header branding is outside this launcher-only change.
 
 - Keep the current reading unchanged during preview, invalid input, and failed submissions. Baseline edits preserve an already recorded reading. If local saving fails after server confirmation, keep the inputs and explain that delivery succeeded but local persistence failed; do not invite a duplicate send.
 - Send `pricePerLitre` in the provisional payload instead of `totalPaid`; do not infer a currency or calculate receipt totals.
@@ -63,7 +67,7 @@ These are reversible client choices, not additional user-agreed domain rules:
 - Backend URL, request contract, authentication, session lifetime/renewal, response semantics, and error format.
 - Whether readings must increase from the previous submission, or multiple entries at the same reading are allowed.
 - Production credential storage and recovery; local prototype password protection is not a server security boundary.
-- Final product name and application/package identifier; RangeBuddy remains a working label.
+- Final application/package identifier and in-app branding; launcher display name is DENICAR per R-DRIVER-013.
 
 ## Change history
 
@@ -77,3 +81,7 @@ These are reversible client choices, not additional user-agreed domain rules:
 - 2026-10-14: User replaced the receipt total with price per litre, requested password protection for baseline edits, and a current-odometer display on home (R-DRIVER-004, R-DRIVER-011, R-DRIVER-012). These supersede the earlier total-paid choice. User clarified that the current reading updates only after confirmed server submission.
 
 - 2026-10-14: Implemented price-per-litre UI/preview/HTTP payload, protected baseline editor, and persistent current reading updated only after confirmed server submission. All 22 automated tests passed; static analysis has no issues. Runtime platform persistence and a real backend remain unverified.
+
+- 2026-10-15: User requested moving `lib/sigla_denicar.jpg` to the appropriate asset folder, using it as the home-screen pictogram, and labeling the icon DENICAR (R-DRIVER-013).
+
+- 2026-10-15: Moved the supplied original to `assets/branding/denicar.jpg`, generated density-specific legacy/adaptive Android icons and PNG web icons, and set Android/web launcher names to DENICAR. Kept the package identifier and profile storage stable. Static resource checks passed; build and real-device evidence is tracked in SC-DRIVER-011.
