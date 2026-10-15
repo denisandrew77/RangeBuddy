@@ -26,7 +26,7 @@ Requirement agreement (`proposed`, `agreed`, `withdrawn`) and implementation (`n
 
 ## Starting state
 
-The workspace was empty when this brain was created on 2026-10-14. The user has since defined a Flutter Android/web app for van drivers; see [Driver app](specs/driver-app.md). `RangeBuddy` is the working name. Backend processing and server login remain deferred.
+The workspace was empty when this brain was created on 2026-10-14. The user has since defined a Flutter Android/web app for van drivers; see [Driver app](specs/driver-app.md). `RangeBuddy` is the working name. The user has now authorized the existing Express API integration; see [API integration](specs/api-integration.md).
 
 ## Reference
 

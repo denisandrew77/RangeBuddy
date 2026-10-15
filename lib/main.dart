@@ -1,18 +1,26 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/fuel_service.dart';
 import 'data/van_profile.dart';
+import 'data/session_store.dart';
 import 'ui/components.dart';
 import 'ui/screens.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  RangeBuddyApi? api;
+  String? configurationError;
+  try {
+    api = RangeBuddyApi.configured();
+  } on ApiException catch (error) {
+    configurationError = error.message;
+  }
   runApp(
     RangeBuddyApp(
-      store: LocalProfileStore(),
-      fuelService: configuredFuelService(),
+      store: SecureSessionStore(),
+      api: api,
+      configurationError: configurationError,
     ),
   );
 }
@@ -21,66 +29,210 @@ class RangeBuddyApp extends StatefulWidget {
   const RangeBuddyApp({
     super.key,
     required this.store,
-    required this.fuelService,
-    this.passwords,
+    required this.api,
+    this.configurationError,
   });
-  final ProfileStore store;
-  final FuelService fuelService;
-  final AdminPasswords? passwords;
-
+  final SessionStore store;
+  final RangeBuddyApi? api;
+  final String? configurationError;
   @override
   State<RangeBuddyApp> createState() => _RangeBuddyAppState();
 }
 
 class _RangeBuddyAppState extends State<RangeBuddyApp> {
-  VanProfile? _profile;
+  final _navigator = GlobalKey<NavigatorState>();
+  DeviceSession? _session;
+  Van? _van;
   bool _loading = true;
-  bool _loadFailed = false;
-  late final _passwords = widget.passwords ?? AdminPasswords();
+  bool _needsSave = false;
+  bool _invalidPending = false;
+  String? _error;
+  String? _activationNotice;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _restore();
   }
 
-  Future<void> _load() async {
+  Future<void> _restore() async {
+    if (widget.api == null) {
+      setState(() {
+        _loading = false;
+        _error = widget.configurationError;
+      });
+      return;
+    }
     setState(() {
       _loading = true;
-      _loadFailed = false;
+      _error = null;
     });
     try {
-      final profile = await widget.store.load();
+      _session = await widget.store.load();
+      if (_session != null) {
+        _van = await _authorized((s) => widget.api!.getVan(s));
+      }
+    } on ApiException catch (error) {
+      if (mounted && _session != null) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Sesiunea nu a putut fi citită. Datele locale nu au fost șterse.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<T> _authorized<T>(
+    Future<T> Function(DeviceSession session) action,
+  ) async {
+    try {
+      return await action(_session!);
+    } on ApiException catch (error) {
+      if (error.invalidDeviceToken) {
+        _invalidPending = true;
+        await _clearInvalid();
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _clearInvalid() async {
+    try {
+      await widget.store.clear();
+      if (!mounted) return;
+      setState(() {
+        _session = null;
+        _van = null;
+        _invalidPending = false;
+        _error = null;
+        _activationNotice =
+            'Sesiunea dispozitivului nu mai este validă. Activează din nou.';
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Sesiunea este invalidă, dar ștergerea locală nu a reușit. Reîncearcă ștergerea.',
+        );
+      }
+    }
+  }
+
+  Future<void> _persistSession() async {
+    try {
+      await widget.store.save(_session!);
       if (mounted) {
         setState(() {
-          _profile = profile;
-          _loading = false;
+          _needsSave = false;
+          _error = null;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _loadFailed = true;
-          _loading = false;
+          _needsSave = true;
+          _error = 'Operația a reușit pe server, dar sesiunea nu a putut fi salvată local. Reîncearcă doar salvarea locală.';
         });
       }
     }
   }
 
-  Future<void> _save(VanProfile profile) async {
-    await widget.store.save(profile);
-    if (mounted) setState(() => _profile = profile);
+  Future<void> _activate(String plate, int km, String password) async {
+    final result = await widget.api!.activate(plate, km, password);
+    if (!mounted) return;
+    _session = DeviceSession(
+      token: result.token,
+      plate: result.van.licensePlate,
+      baseUrl: widget.api!.baseUrl,
+    );
+    _van = result.van;
+    await _persistSession();
+  }
+
+  Future<Van> _refreshVan() async {
+    final van = await _authorized((s) => widget.api!.getVan(s));
+    if (mounted) setState(() => _van = van);
+    return van;
+  }
+
+  Future<void> _changePlate(String plate, String password) async {
+    final van = await _authorized(
+      (s) => widget.api!.changePlate(s, plate, password),
+    );
+    if (!mounted) return;
+    _van = van;
+    _session = _session!.withPlate(van.licensePlate);
+    await _persistSession();
+    if (mounted) setState(() {});
   }
 
   Future<void> _signOut() async {
-    if (!kDebugMode) return;
-    await widget.store.clear();
-    if (mounted) setState(() => _profile = null);
+    try {
+      await widget.store.clear();
+    } catch (_) {
+      throw const ApiException(
+        'Deconectarea locală nu a reușit. Sesiunea a fost păstrată.',
+      );
+    }
+    if (mounted) {
+      setState(() {
+        _session = null;
+        _van = null;
+        _error = null;
+        _needsSave = false;
+        _invalidPending = false;
+        _activationNotice = null;
+      });
+    }
+  }
+
+  Future<void> _retryRecovery() async {
+    setState(() => _loading = true);
+    if (_invalidPending) {
+      await _clearInvalid();
+    } else if (_needsSave) {
+      await _persistSession();
+    } else {
+      await _restore();
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Widget _content() {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_invalidPending || _needsSave || _error != null || widget.api == null) {
+      return RecoveryPage(
+        message: _error ?? widget.configurationError ?? 'API indisponibil.',
+        onRetry: widget.api == null ? null : _retryRecovery,
+        onSignOut: widget.api == null ? null : _signOut,
+      );
+    }
+    if (_session == null) {
+      return ActivationPage(onActivate: _activate, notice: _activationNotice);
+    }
+    return HomePage(
+      van: _van!,
+      onRefreshVan: _refreshVan,
+      onHistory: (month, year) => _authorized(
+        (s) => widget.api!.getEntries(s, month: month, year: year),
+      ),
+      onSubmit: (draft) => _authorized(
+        (s) => widget.api!.addEntry(s, draft, lastKms: _van!.lastKms),
+      ),
+      onChangePlate: _changePlate,
+      onSignOut: _signOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'DENICAR',
+    navigatorKey: _navigator,
     locale: const Locale('ro', 'RO'),
     supportedLocales: const [Locale('ro', 'RO')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -134,42 +286,6 @@ class _RangeBuddyAppState extends State<RangeBuddyApp> {
         ),
       ),
     ),
-    home: _loading
-        ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-        : _loadFailed
-        ? PageFrame(
-            child: SectionCard(
-              child: Column(
-                children: [
-                  const Icon(Icons.cloud_off_outlined, size: 36, color: muted),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Configurarea autoutilitarei nu a putut fi încărcată.',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Datele salvate au fost păstrate. Încearcă din nou.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ActionButton(
-                    label: 'Încearcă din nou',
-                    onPressed: _load,
-                    icon: Icons.refresh,
-                  ),
-                ],
-              ),
-            ),
-          )
-        : _profile == null
-        ? SetupPage(passwords: _passwords, onSave: _save)
-        : HomePage(
-            profile: _profile!,
-            passwords: _passwords,
-            service: widget.fuelService,
-            onSave: _save,
-            onSignOut: kDebugMode ? _signOut : null,
-          ),
+    home: _content(),
   );
 }

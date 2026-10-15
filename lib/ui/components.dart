@@ -93,15 +93,16 @@ class SectionCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => SizedBox(
     width: double.infinity,
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(
+    child: Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: const Color(0xFFE2E9ED)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFFE2E9ED)),
+      ),
+      child: Padding(padding: const EdgeInsets.all(24), child: child),
     ),
-    child: child,
   );
 }
 
@@ -159,6 +160,7 @@ class NumberField extends StatelessWidget {
     this.allowZero = false,
     this.minimum,
     this.hint,
+    this.validator,
   });
   final TextEditingController controller;
   final String label;
@@ -167,6 +169,7 @@ class NumberField extends StatelessWidget {
   final bool allowZero;
   final double? minimum;
   final String? hint;
+  final FormFieldValidator<String>? validator;
 
   @override
   Widget build(BuildContext context) => TextFormField(
@@ -179,8 +182,9 @@ class NumberField extends StatelessWidget {
       prefixIcon: Icon(icon),
       suffixText: unit.isEmpty ? null : unit,
     ),
-    validator: (value) =>
-        numericError(value, allowZero: allowZero, minimum: minimum),
+    validator:
+        validator ??
+        (value) => numericError(value, allowZero: allowZero, minimum: minimum),
   );
 }
 
@@ -224,18 +228,20 @@ class ActionButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.busy = false,
+    this.enabled = true,
     this.icon = Icons.arrow_forward,
   });
   final String label;
   final VoidCallback onPressed;
   final bool busy;
+  final bool enabled;
   final IconData icon;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: double.infinity,
     child: FilledButton.icon(
-      onPressed: busy ? null : onPressed,
+      onPressed: busy || !enabled ? null : onPressed,
       icon: busy
           ? const SizedBox(
               width: 18,

@@ -6,14 +6,14 @@ The interface is Romanian (`ro_RO`), including Material controls, validation, an
 
 ## Implemented
 
-- Setup: licence plate, admin password, and starting kilometres (default 0).
-- Main screen: plate header, current kilometres, litres added, price per litre, and Send entry.
-- Password-protected licence-plate and starting-kilometres editors.
-- Current odometer in the home header, persisted after a confirmed server submission.
-- Persistent local setup across app restarts/browser reloads.
-- Numeric validation, submission progress, and errors that retain the entry.
+- Server activation using plate, initial integer mileage (default 0) and transient administrator password.
+- Device token and remembered plate in `flutter_secure_storage`; authenticated restoration via the own-van lookup.
+- Vehicle overview with current server mileage; fuel entry with integer mileage, litres, price per litre and date/time selection.
+- Monthly fuel history, month/year filters, refresh, empty/offline/error states and duplicate-submit prevention.
+- Server-verified password-protected plate-change dialog; token stays unchanged after a plate change.
+- Local sign-out in every build. It clears session storage and does not revoke the server token.
 
-No server login guard is included. Debug builds show a **Deconectare** button below the fuel form to remove the local van setup and return to setup for testing. The action is absent in profile/release builds. Local setup persistence is not a server login session. Admin password verification is local, with a salted PBKDF2 verifier; production server authentication remains future work.
+Prototype local password verification and preview submission have been replaced. Old prototype profiles are removed on session loading; activate the device against the server. Initial mileage cannot be edited after activation because the API exposes no endpoint for that. Reactivation preserves the server’s existing mileage and history and rotates its token.
 
 ## Run locally
 
@@ -48,27 +48,22 @@ In VS Code, the Flutter/Dart extensions are installed and workspace settings poi
 
 ## Server integration
 
-Without configuration, Send entry shows an **Entry preview** dialog. Nothing is transmitted, stored as a fuel record, or processed. Inputs remain in the form; they do not survive app closure. Preview leaves the saved odometer unchanged; only confirmed server submissions update it.
+The configured default is `https://emailplatformbackend.onrender.com/api/rangebuddy`. All protected calls send `Authorization: RangeBuddy <token>`; activation has no Authorization header. No direct Supabase connection or service credentials are used.
 
-An HTTP adapter can be enabled when a test server exists:
+Override the base URL at build/run time (it must end in `/api/rangebuddy`):
 
 ```sh
-flutter run -d chrome --dart-define=FUEL_API_URL=https://your-server.example/fuel-entries
+./tool/flutterw run -d chrome --dart-define=RANGEBUDDY_API_BASE_URL=https://your-server.example/api/rangebuddy
+./tool/flutterw build apk --debug --dart-define=RANGEBUDDY_API_BASE_URL=https://your-server.example/api/rangebuddy
 ```
 
-The provisional request is a JSON POST:
+HTTPS is required outside debug builds. Secure storage on web requires HTTPS or localhost, and the backend must allow the browser origin through CORS. Android backup is disabled for the device’s encrypted session storage. A session is bound to its API base URL; switching servers requires local sign-out/reactivation before its token can be used.
 
-```json
-{
-  "licencePlate": "B 123 ABC",
-  "odometerKm": 125150,
-  "fuelLitres": 42.5,
-  "pricePerLitre": 7.25,
-  "recordedAt": "2026-10-14T12:00:00.000Z"
-}
-```
+Entries send exactly `current_kms`, `litres`, `price_per_litre`, and UTC `fuel_date`. Mileage must be an integer greater than the latest server mileage; litres and price have at most three decimal places and accept comma or dot input. Currency remains unspecified. History filters follow server Europe/Bucharest months; dates are displayed/selected in device local time.
 
-The adapter treats HTTP 2xx as accepted, with no response-body contract yet. Currency and backend contract remain undecided. No admin password is sent. Web servers must allow the testing origin through CORS; Android release networking uses HTTPS by default. There are no automatic retries or offline fuel queues.
+Requests do not retry writes or follow redirects automatically. If a write succeeds but refresh or local persistence fails, recovery performs reads or local saving without repeating the write. Unknown 401 errors, wrong passwords, network failures and van 404 retain the session. Explicit invalid-token 401 errors clear it. The backend’s exact invalid-token payload still needs confirmation: currently recognized markers are `code`/`error: invalid_device_token` or `error: Invalid device token` (case-insensitive, optional final period).
+
+The [API spec](project-brain/specs/api-integration.md) records the supplied contract and known verification gaps. Automated checks use mocked networking and storage; production has not been contacted during implementation.
 
 ## Checks and previews
 
@@ -79,7 +74,7 @@ The adapter treats HTTP 2xx as accepted, with no response-body contract yet. Cur
 ./tool/flutterw test tool/capture_previews.dart
 ```
 
-The preview helper writes [setup](artifacts/previews/setup.png) and [home](artifacts/previews/home.png) screenshots. Tests cover setup, reopening, protected editing, baseline editing, validation, honest preview behavior, HTTP payloads/errors, failed persistence, duplicate submission prevention, and narrow/wide layouts.
+The preview helper writes [setup](artifacts/previews/setup.png) and [home](artifacts/previews/home.png) screenshots. Tests cover exact HTTP payloads/authorization, secure session restoration, activation/reactivation, fuel submission, monthly history, plate changes, error recovery, storage failures, duplicate-submit prevention, date/time controls, and narrow/wide layouts. The preview helper also uses mocked API/storage.
 
 Read [Project Brain](project-brain/README.md) for the agreed specs, derived scenarios, architecture decisions, and open questions. Root [AGENTS.md](AGENTS.md) instructs future AI sessions to keep those files updated.
 

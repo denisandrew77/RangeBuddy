@@ -1,3 +1,5 @@
+> Historical prototype scenarios below were executed before Express integration. SC-DRIVER-001–006, 009 and 010 are superseded by SC-API-001–007 in [API integration](api-integration.md); SC-DRIVER-005 is withdrawn for post-activation baseline editing. Old passes do not verify the connected app. Presentation/localization/launcher scenarios remain applicable; see latest API verification for current evidence.
+
 # Driver app scenarios
 
 Source: [Driver app spec](../specs/driver-app.md)

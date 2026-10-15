@@ -1,5 +1,4 @@
 // Run: flutter test tool/capture_previews.dart
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -7,25 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:range_buddy/data/fuel_service.dart';
-import 'package:range_buddy/data/van_profile.dart';
+import 'package:range_buddy/data/session_store.dart';
+
+import '../test/support.dart';
+
 import 'package:range_buddy/main.dart';
-
-class PreviewStore implements ProfileStore {
-  PreviewStore(this.profile);
-  VanProfile? profile;
-  @override
-  Future<VanProfile?> load() async => profile;
-  @override
-  Future<void> save(VanProfile value) async {
-    profile = value;
-  }
-
-  @override
-  Future<void> clear() async {
-    profile = null;
-  }
-}
 
 void main() {
   testWidgets('capture setup and fuel entry previews', (tester) async {
@@ -40,12 +25,6 @@ void main() {
       await icons.load();
     });
     final key = GlobalKey();
-    final profile = VanProfile(
-      plate: 'B 123 ABC',
-      startingKm: 125000,
-      passwordSalt: base64Encode(List.filled(16, 1)),
-      passwordHash: base64Encode(List.filled(32, 2)),
-    );
     tester.view.physicalSize = const Size(390, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -56,8 +35,13 @@ void main() {
         RepaintBoundary(
           key: key,
           child: RangeBuddyApp(
-            store: PreviewStore(page == 'setup' ? null : profile),
-            fuelService: PreviewFuelService(),
+            store: SecureSessionStore(
+              storage: page == 'setup'
+                  ? MemorySecrets()
+                  : (MemorySecrets()..seed()),
+              removeLegacyProfile: () async {},
+            ),
+            api: TestServer().api,
           ),
         ),
       );

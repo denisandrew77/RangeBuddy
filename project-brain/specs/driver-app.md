@@ -7,67 +7,46 @@ Architecture: [ADR-002](../adrs/ADR-002-flutter-client.md)
 
 ## Context and glossary
 
-Van drivers record refuelling data for future server-side processing. The first delivery is the Flutter client, targeting Android and web for local testing.
+Van drivers record refuelling data through the existing Express API. The client targets Android and web.
 
 - **Kilometres:** the van's current odometer reading in km.
-- **Starting kilometres:** editable baseline reading, initially 0.
+- **Starting kilometres:** activation input, initially 0; server mileage is authoritative thereafter.
 - **Fuel litres:** amount of fuel added during this entry.
 - **Price per litre:** unit price of the fuel; replaces the previously requested receipt total.
-- **Admin password:** the password chosen at setup to protect licence-plate and starting-kilometres editing; separate from future server login.
+- **Admin password:** transient server-verified credential used for activation and plate changes.
 
 ## Use cases
 
 - UC-DRIVER-001: Set up the van with a plate, admin password, and editable starting kilometres; Create opens the main screen.
 - UC-DRIVER-002: Enter kilometres, fuel litres, and price per litre, then submit the entry for processing.
-- UC-DRIVER-003: Authenticate with the admin password and edit the van's licence plate.
+- UC-DRIVER-003: Change the plate in a dialog using the transient admin password, verified by the server.
 - UC-DRIVER-004: Reopen the app and continue with the existing setup without being deliberately logged out.
 
 ## Agreed requirements
 
+Connected behavior and API details are owned by [API integration](api-integration.md).
+
 | ID | Requirement | Agreement | Implementation |
 | --- | --- | --- | --- |
-| R-DRIVER-001 | Build a Flutter mobile interface for Android and a web target for local testing. | agreed | built |
-| R-DRIVER-002 | Setup asks for the licence plate and admin password. Create opens the main screen. | agreed | built |
-| R-DRIVER-003 | Starting kilometres default to 0 and can be edited. | agreed | built |
-| R-DRIVER-004 | The main screen displays the licence plate at the top and exactly three entry fields: odometer kilometres, fuel litres, and price per litre. | agreed | built |
-| R-DRIVER-005 | A submit button sends the three values to a server for processing; the server is not available in this delivery. | agreed | partial |
-| R-DRIVER-006 | Provide a separate licence-plate editing page protected by the admin password. | agreed | built |
-| R-DRIVER-007 | Users should remain signed in once logged in; omit the server login guard for now. | agreed | partial |
-| R-DRIVER-008 | Use Material Design with a modern, simple, classic interface. | agreed | built |
-| R-DRIVER-009 | The app interface is Romanian, including all pages, field labels, actions, hints, validation, errors, tooltips, and built-in Material controls. | agreed | built |
-| R-DRIVER-011 | Editing starting kilometres after setup requires the admin password, with a fresh check on every visit. | agreed | built |
-| R-DRIVER-012 | The main page displays the current odometer reading, updated only after confirmed server submission and retained across reopening. Before any confirmed entry it uses the starting kilometres. | agreed | built |
-| R-DRIVER-010 | Provide an explicit sign-out button for development so setup can be tested again. | agreed | built |
-
-R-DRIVER-001 has successful web and Android debug builds; physical-device execution remains unverified because no phone is connected. R-DRIVER-005 has a tested preview and HTTP adapter; actual backend processing is deferred. R-DRIVER-007 has persistent local setup with no login guard or production logout; server session behavior remains deferred.
-
-| R-DRIVER-013 | Use the user-supplied DENICAR JPG as the launcher/home-screen icon and display DENICAR underneath it. Keep the source image in the asset folder. | agreed | built |
-
-## Implementation choices for this delivery
-
-These are reversible client choices, not additional user-agreed domain rules:
-
-- Preserve the full supplied wordmark with white padding in density-specific Android legacy/adaptive icons and web home-screen icons; launcher naming also applies to web installation metadata. Package identifiers and local profile keys stay stable so this updates the existing app. In-app header branding is outside this launcher-only change.
-
-- Keep the current reading unchanged during preview, invalid input, and failed submissions. Baseline edits preserve an already recorded reading. If local saving fails after server confirmation, keep the inputs and explain that delivery succeeded but local persistence failed; do not invite a duplicate send.
-- Send `pricePerLitre` in the provisional payload instead of `totalPaid`; do not infer a currency or calculate receipt totals.
-- Verify the administrator password before displaying the baseline editor; require a fresh check on each visit.
-- Edit the baseline in setup, and later from a separate starting-kilometres settings page. Keep the main entry form to three fields.
-- Keep the local van setup across restarts. Production has no logout button; development has the explicit exception in R-DRIVER-010. This is local persistence, not implemented server authentication.
-- Show “Deconectare” on the main screen only in debug builds. It removes this app's saved van profile (including the admin verifier and baseline) and returns to setup. Retain the current profile if removal fails; disable the action during submission or removal. This local reset does not contact a server.
-- Verify the admin password before displaying the plate-edit form, and require it again on a new visit. Persist a salted password verifier rather than plaintext.
-- Require a nonempty plate and password; allow kilometres >= 0 and positive litres/price per litre. Support dot/comma decimal input, reject invalid/nonfinite values, and reject current readings below the baseline. Exact domain limits remain open.
-- When no server URL is configured, show a clearly labeled preview of the payload and keep the entered values. Do not claim a successful send or server processing.
-- Support an optional HTTP POST adapter via `FUEL_API_URL`; the initial JSON contract is provisional until a backend is agreed. Failed requests retain the form for retry.
+| R-DRIVER-001 | Flutter Android client and web target for local testing. | agreed | built |
+| R-DRIVER-002 | Activate the van with plate, admin password and initial kilometres; see R-API-002. | agreed | built |
+| R-DRIVER-003 | Initial kilometres default to 0 at activation. Post-activation edits are unavailable under the supplied API contract. | agreed | built |
+| R-DRIVER-004 | Main screen shows plate and three numeric fuel fields: current kilometres, litres, price per litre; add date/time selection per R-API-004. | agreed | built |
+| R-DRIVER-005 | Submit entries to the Express API; backend integration now in scope (R-API-004). | agreed | built |
+| R-DRIVER-006 | Password-protected plate-change dialog backed by server verification (R-API-006). | agreed | built |
+| R-DRIVER-007 | Restore a secure device session after reopening (R-API-003). | agreed | built |
+| R-DRIVER-008 | Material Design with a modern, simple, classic interface. | agreed | built |
+| R-DRIVER-009 | Romanian interface, including built-in Material controls. | agreed | built |
+| R-DRIVER-010 | Provide local sign-out, now available in all builds (R-API-007). | agreed | built |
+| R-DRIVER-011 | Password-protected local starting-mileage editor. Withdrawn: supplied API has no endpoint; replaced by activation-only initial mileage in R-API-002. | withdrawn | not applicable |
+| R-DRIVER-012 | Display current mileage from the server; refresh only after accepted submissions (R-API-004). | agreed | built |
+| R-DRIVER-013 | Supplied DENICAR JPG launcher icon and DENICAR home-screen label; source in assets/branding. | agreed | built |
 
 ## Open questions
 
-- Currency for the price-per-litre field (no currency is assumed in this delivery).
-
-- Backend URL, request contract, authentication, session lifetime/renewal, response semantics, and error format.
-- Whether readings must increase from the previous submission, or multiple entries at the same reading are allowed.
-- Production credential storage and recovery; local prototype password protection is not a server security boundary.
-- Final application/package identifier and in-app branding; launcher display name is DENICAR per R-DRIVER-013.
+- Currency remains unspecified; do not invent one.
+- Final application/package identifier and in-app branding remain unchanged.
+- See API spec for explicit invalid-token payload confirmation and integration verification gaps.
 
 ## Change history
 
@@ -85,3 +64,7 @@ These are reversible client choices, not additional user-agreed domain rules:
 - 2026-10-15: User requested moving `lib/sigla_denicar.jpg` to the appropriate asset folder, using it as the home-screen pictogram, and labeling the icon DENICAR (R-DRIVER-013).
 
 - 2026-10-15: Moved the supplied original to `assets/branding/denicar.jpg`, generated density-specific legacy/adaptive Android icons and PNG web icons, and set Android/web launcher names to DENICAR. Kept the package identifier and profile storage stable. Static resource checks passed; build and real-device evidence is tracked in SC-DRIVER-011.
+
+- 2026-10-15: API integration request supersedes prototype preview, local password verification, baseline editing and debug-only logout. Contract and new requirements are owned by api-integration.md.
+
+- 2026-10-15: Connected client flows implemented and verified with 38 mocked tests. Actual production API delivery and platform storage remain unverified; see API scenarios.

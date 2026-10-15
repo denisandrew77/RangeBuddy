@@ -1,6 +1,6 @@
 # Android development setup
 
-Updated: 2026-10-14
+Updated: 2026-10-15
 Source: user asked to handle Android setup after discussing VS Code and command-line tooling instead of Android Studio.
 Scenarios: [Android development](../scenarios/android-development.md)
 
@@ -29,3 +29,5 @@ A physical phone must have USB debugging enabled and authorize this computer on 
 - 2026-10-14: Captured the Android/VS Code setup request. Initial inspection found existing Java 21, no Android SDK, no VS Code Flutter extension, and approximately 8.7 GB free.
 - 2026-10-14: User explicitly instructed not to install an emulator. Interrupted the emulator download and removed its incomplete installation directory. Continue Android SDK, VS Code, and physical-device setup.
 - 2026-10-14: Installed Android command-line tools (verified official SHA-256), API 36, build-tools 36.0.0, platform-tools, and NDK 28.2.13676358; accepted SDK licences as part of the authorized installation. Installed VS Code Flutter/Dart extensions 3.144.0 and configured Java 21, persistent Flutter 3.47.7/Dart 3.13.5, and local caches. Built and signature-verified the debug APK. No physical Android device was detected.
+
+- 2026-10-15: Building the secure-storage API integration succeeded. Gradle installed Android SDK Platform 35 and CMake 3.22.1 into the project-local SDK for plugin compilation; no emulator/system image was installed. Existing Java and wrapper configuration remained sufficient.

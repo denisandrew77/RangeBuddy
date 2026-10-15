@@ -12,9 +12,10 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.5.3
-  cryptography: ^2.7.0
   http: ^1.4.0
   cupertino_icons: ^1.0.8
+  flutter_secure_storage: ^11.2.0
+  timezone: ^0.11.2
 
 dev_dependencies:
   flutter_test:

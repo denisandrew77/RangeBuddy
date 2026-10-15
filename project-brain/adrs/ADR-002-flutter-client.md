@@ -1,7 +1,7 @@
 # ADR-002: Flutter client with persistent local setup and a replaceable submission adapter
 
 Date: 2026-10-14
-Status: accepted
+Status: superseded in part by ADR-003 (API/authentication/storage); Flutter/UI/localization retained
 Source: user chose Flutter Android/web and deferred backend/login guard; client organization and storage are implementation choices made within that scope.
 Related spec: [Driver app](../specs/driver-app.md)
 

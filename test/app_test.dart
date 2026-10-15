@@ -1,75 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:range_buddy/data/fuel_service.dart';
-import 'package:range_buddy/data/van_profile.dart';
+import 'package:http/http.dart' as http;
+import 'package:range_buddy/data/session_store.dart';
 import 'package:range_buddy/main.dart';
-import 'package:range_buddy/ui/screens.dart';
 
-final profile = VanProfile(
-  plate: 'B 123 ABC',
-  startingKm: 0,
-  passwordSalt: base64Encode(List.filled(16, 1)),
-  passwordHash: base64Encode(List.filled(32, 2)),
-);
-
-class MemoryStore implements ProfileStore {
-  MemoryStore([this.profile]);
-  VanProfile? profile;
-  bool failSave = false;
-  bool failClear = false;
-  @override
-  Future<VanProfile?> load() async => profile;
-  @override
-  Future<void> save(VanProfile value) async {
-    if (failSave) throw StateError('Storage unavailable');
-    profile = value;
-  }
-
-  @override
-  Future<void> clear() async {
-    if (failClear) throw StateError('Storage unavailable');
-    profile = null;
-  }
-}
-
-// Crypto itself is exercised in data_test; deterministic UI verification avoids
-// mixing CPU-intensive derivation with Flutter's simulated widget-test clock.
-class TestPasswords extends AdminPasswords {
-  @override
-  Future<VanProfile> create(String plate, double km, String password) async =>
-      profile.copyWith(plate: plate.trim().toUpperCase(), startingKm: km);
-  @override
-  Future<bool> verify(VanProfile profile, String password) async =>
-      password == 'secret';
-}
-
-class PendingService implements FuelService {
-  final response = Completer<SubmissionResult>();
-  int calls = 0;
-  @override
-  bool get isPreview => false;
-  @override
-  Future<SubmissionResult> submit(FuelEntry entry) {
-    calls++;
-    return response.future;
-  }
-}
+import 'support.dart';
 
 Future<void> start(
   WidgetTester tester,
-  MemoryStore store, {
-  FuelService? service,
-}) async {
-  await tester.pumpWidget(
-    RangeBuddyApp(
-      store: store,
-      fuelService: service ?? PreviewFuelService(),
-      passwords: TestPasswords(),
-    ),
-  );
+  MemorySecrets secrets,
+  TestServer server,
+) async {
+  await tester.pumpWidget(RangeBuddyApp(store: secrets.store, api: server.api));
   await tester.pumpAndSettle();
 }
 
@@ -79,264 +23,235 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> fillFuel(WidgetTester tester) async {
+Future<void> fillActivation(WidgetTester tester) async {
   final fields = find.byType(TextFormField);
-  await tester.enterText(fields.at(0), '150');
-  await tester.enterText(fields.at(1), '42,5');
-  await tester.enterText(fields.at(2), '7,25');
+  await tester.enterText(fields.at(0), ' b123abc ');
+  await tester.enterText(fields.at(1), '100000');
+  await tester.enterText(fields.at(2), 'entered password');
+}
+
+Future<void> fillFuel(
+  WidgetTester tester, {
+  String km = '100500',
+  String litres = '45,5',
+  String price = '7,25',
+}) async {
+  final fields = find.byType(TextFormField);
+  await tester.enterText(fields.at(0), km);
+  await tester.enterText(fields.at(1), litres);
+  await tester.enterText(fields.at(2), price);
+}
+
+Future<void> openPlate(WidgetTester tester) =>
+    tapVisible(tester, find.byTooltip('Modifică numărul de înmatriculare'));
+Future<void> fillPlate(WidgetTester tester) async {
+  final dialog = find.byType(AlertDialog);
+  final fields = find.descendant(
+    of: dialog,
+    matching: find.byType(TextFormField),
+  );
+  await tester.enterText(fields.at(0), ' b456xyz ');
+  await tester.enterText(fields.at(1), 'entered password');
 }
 
 void main() {
   testWidgets(
-    'development sign out clears setup and reopening stays on setup',
+    'activation validates, obscures transient password and securely restores session',
     (tester) async {
-      final store = MemoryStore(profile);
-      await start(tester, store);
-      await fillFuel(tester);
-      await tapVisible(tester, find.text('Deconectare'));
-      expect(store.profile, isNull);
-      expect(find.text('Gata de drum.'), findsOneWidget);
+      final secrets = MemorySecrets();
+      final server = TestServer()..km = 180000;
+      await start(tester, secrets, server);
       expect(
-        tester
-            .widget<TextFormField>(find.byType(TextFormField).at(1))
-            .controller!
-            .text,
-        '0',
+        Localizations.localeOf(tester.element(find.text('Gata de drum.'))),
+        const Locale('ro', 'RO'),
       );
-      await tester.pumpWidget(const SizedBox());
-      await start(tester, store);
-      expect(find.text('Gata de drum.'), findsOneWidget);
-      expect(find.text('B 123 ABC'), findsNothing);
-    },
-  );
-
-  testWidgets('failed sign out preserves the profile and entry', (
-    tester,
-  ) async {
-    final store = MemoryStore(profile)..failClear = true;
-    await start(tester, store);
-    await fillFuel(tester);
-    await tapVisible(tester, find.text('Deconectare'));
-    expect(
-      find.text('Deconectarea nu a reușit. Încearcă din nou.'),
-      findsOneWidget,
-    );
-    expect(store.profile, profile);
-    expect(find.text('B 123 ABC'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextFormField>(find.byType(TextFormField).at(2))
-          .controller!
-          .text,
-      '7,25',
-    );
-  });
-
-  testWidgets('home without a development callback has no sign out button', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomePage(
-          profile: profile,
-          passwords: TestPasswords(),
-          service: PreviewFuelService(),
-          onSave: (_) async {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Deconectare'), findsNothing);
-  });
-  testWidgets(
-    'setup validates and creates a persistent van, then reopening skips setup',
-    (tester) async {
-      final store = MemoryStore();
-      await start(tester, store);
-      expect(find.text('Gata de drum.'), findsOneWidget);
-      final context = tester.element(find.text('Gata de drum.'));
-      expect(Localizations.localeOf(context), const Locale('ro', 'RO'));
-      expect(MaterialLocalizations.of(context).backButtonTooltip, 'Înapoi');
-      await tapVisible(tester, find.text('Creează'));
-      expect(find.text('Acest câmp este obligatoriu'), findsNWidgets(2));
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'b 123 abc');
-      await tester.enterText(fields.at(1), '100');
-      await tester.enterText(fields.at(2), 'secret');
-      await tapVisible(tester, find.text('Creează'));
-      expect(find.text('B 123 ABC'), findsOneWidget);
-      expect(find.byType(TextFormField), findsNWidgets(3));
-      expect(store.profile!.startingKm, 100);
-      await tester.pumpWidget(const SizedBox());
-      await start(tester, store);
-      expect(find.text('B 123 ABC'), findsOneWidget);
-      expect(find.text('Creează'), findsNothing);
-    },
-  );
-
-  testWidgets('preview shows all values honestly and keeps the form', (
-    tester,
-  ) async {
-    await start(tester, MemoryStore(profile));
-    await fillFuel(tester);
-    await tapVisible(tester, find.text('Trimite datele'));
-    expect(
-      find.text('Serverul nu este conectat. Datele nu au fost trimise.'),
-      findsOneWidget,
-    );
-    expect(find.text('Combustibil alimentat: 42,5 L'), findsOneWidget);
-    expect(find.text('Preț pe litru: 7,25'), findsOneWidget);
-    expect(find.text('Kilometraj actual  ·  0 km'), findsOneWidget);
-    await tapVisible(tester, find.text('Înapoi la formular'));
-    final input = tester.widget<TextFormField>(
-      find.byType(TextFormField).at(1),
-    );
-    expect(input.controller!.text, '42,5');
-  });
-
-  testWidgets(
-    'plate editing rejects wrong password, saves after unlock, and relocks',
-    (tester) async {
-      final store = MemoryStore(profile);
-      await start(tester, store);
-      await tapVisible(tester, find.byTooltip('Setări autoutilitară'));
-      await tapVisible(tester, find.text('Modifică numărul de înmatriculare'));
-      expect(find.byKey(const ValueKey('edit-plate')), findsNothing);
-      await tester.enterText(find.byType(TextFormField), 'wrong');
-      await tapVisible(tester, find.text('Deblochează editarea'));
+      await tapVisible(tester, find.text('Activează'));
+      expect(server.requests, isEmpty);
+      await fillActivation(tester);
       expect(
-        find.text('Parola de administrator este incorectă. Încearcă din nou.'),
+        tester.widget<TextField>(find.byType(TextField).at(2)).obscureText,
+        isTrue,
+      );
+      await tapVisible(tester, find.text('Activează'));
+      expect(find.text('Kilometraj actual  ·  180000 km'), findsOneWidget);
+      final stored = secrets.values.values.single;
+      expect(stored, isNot(contains('entered password')));
+      expect(stored, isNot(contains('passwordHash')));
+      expect((await secrets.store.load())!.token, testToken);
+      await tester.pumpWidget(const SizedBox());
+      await start(tester, secrets, server);
+      expect(find.text('B123ABC'), findsOneWidget);
+      expect(server.count('POST'), 1);
+    },
+  );
+  testWidgets(
+    'wrong activation password stays a form error and clears only password input',
+    (tester) async {
+      final secrets = MemorySecrets();
+      final server = TestServer()
+        ..intercept = (r) async => r.method == 'POST'
+            ? jsonResponse({'error': 'Wrong password'}, 401)
+            : null;
+      await start(tester, secrets, server);
+      await fillActivation(tester);
+      await tapVisible(tester, find.text('Activează'));
+      expect(find.textContaining('Verifică parola'), findsOneWidget);
+      expect(secrets.values, isEmpty);
+      final fields = find.byType(TextFormField);
+      expect(
+        tester.widget<TextFormField>(fields.at(0)).controller!.text,
+        ' b123abc ',
+      );
+      expect(tester.widget<TextFormField>(fields.at(2)).controller!.text, '');
+    },
+  );
+  testWidgets('activation disables duplicate writes while pending', (
+    tester,
+  ) async {
+    final secrets = MemorySecrets();
+    final pending = Completer<http.Response>();
+    final server = TestServer()
+      ..intercept = (r) async => r.method == 'POST' ? pending.future : null;
+    await start(tester, secrets, server);
+    await fillActivation(tester);
+    await tester.ensureVisible(find.text('Activează'));
+    await tester.tap(find.text('Activează'));
+    await tester.pump();
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNull,
+    );
+    expect(server.count('POST'), 1);
+    pending.complete(jsonResponse({'token': testToken, 'van': vanJson()}, 201));
+    await tester.pumpAndSettle();
+    expect(find.text('B123ABC'), findsOneWidget);
+  });
+  testWidgets(
+    'activation storage failure retries only local persistence, not activation',
+    (tester) async {
+      final secrets = MemorySecrets()..failWrite = true;
+      final server = TestServer();
+      await start(tester, secrets, server);
+      await fillActivation(tester);
+      await tapVisible(tester, find.text('Activează'));
+      expect(find.textContaining('doar salvarea locală'), findsOneWidget);
+      secrets.failWrite = false;
+      await tapVisible(tester, find.text('Reîncearcă'));
+      expect(find.text('B123ABC'), findsOneWidget);
+      expect(server.count('POST'), 1);
+    },
+  );
+  for (final status in [401, 404, 503]) {
+    testWidgets(
+      'restore HTTP $status retains secure session and offers recovery',
+      (tester) async {
+        final secrets = MemorySecrets()..seed();
+        final server = TestServer()
+          ..intercept = (r) async => jsonResponse({
+            'error': 'Unspecified authorization or lookup error',
+          }, status);
+        await start(tester, secrets, server);
+        expect(find.text('Reîncearcă'), findsOneWidget);
+        expect(secrets.values, isNotEmpty);
+        server.intercept = null;
+        await tapVisible(tester, find.text('Reîncearcă'));
+        expect(find.text('B123ABC'), findsOneWidget);
+      },
+    );
+  }
+  testWidgets(
+    'offline restore and malformed/read-failed storage retain records',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer()
+        ..intercept = (r) async => throw http.ClientException('offline');
+      await start(tester, secrets, server);
+      expect(
+        find.textContaining('Conexiunea nu este disponibilă'),
         findsOneWidget,
       );
-      await tester.enterText(find.byType(TextFormField), 'secret');
-      await tapVisible(tester, find.text('Deblochează editarea'));
-      await tester.enterText(
-        find.byKey(const ValueKey('edit-plate')),
-        'cj 99 van',
+      expect(secrets.values, isNotEmpty);
+      await tester.pumpWidget(const SizedBox());
+      secrets.failRead = true;
+      await start(tester, secrets, server);
+      expect(
+        find.textContaining('Sesiunea nu a putut fi citită'),
+        findsOneWidget,
       );
-      await tapVisible(tester, find.text('Salvează numărul'));
-      expect(find.text('CJ 99 VAN'), findsOneWidget);
-      expect(store.profile!.plate, 'CJ 99 VAN');
-      await tapVisible(tester, find.byTooltip('Setări autoutilitară'));
-      await tapVisible(tester, find.text('Modifică numărul de înmatriculare'));
-      expect(find.text('Deblochează editarea'), findsOneWidget);
-      expect(find.byKey(const ValueKey('edit-plate')), findsNothing);
+      expect(secrets.values, isNotEmpty);
+      await tester.pumpWidget(const SizedBox());
+      secrets.failRead = false;
+      secrets.values[SecureSessionStore.storageKey] = '{}';
+      await start(tester, secrets, server);
+      expect(find.text('Reîncearcă'), findsOneWidget);
     },
   );
-
-  testWidgets('starting kilometres can be edited and persist', (tester) async {
-    final store = MemoryStore(profile);
-    await start(tester, store);
-    await tapVisible(tester, find.byTooltip('Setări autoutilitară'));
-    await tapVisible(tester, find.text('Kilometraj inițial'));
-    expect(find.text('Salvează kilometrajul'), findsNothing);
-    await tester.enterText(find.byType(TextFormField), 'wrong');
-    await tapVisible(tester, find.text('Deblochează editarea'));
-    expect(
-      find.text('Parola de administrator este incorectă. Încearcă din nou.'),
-      findsOneWidget,
-    );
-    expect(find.text('Salvează kilometrajul'), findsNothing);
-    await tester.enterText(find.byType(TextFormField), 'secret');
-    await tapVisible(tester, find.text('Deblochează editarea'));
-    await tester.enterText(find.byType(TextFormField), '200');
-    await tapVisible(tester, find.text('Salvează kilometrajul'));
-    expect(find.text('Kilometraj actual  ·  200 km'), findsOneWidget);
-    expect(store.profile!.startingKm, 200);
-    await tester.pumpWidget(const SizedBox());
-    await start(tester, store);
-    expect(find.text('Kilometraj actual  ·  200 km'), findsOneWidget);
-    await tapVisible(tester, find.byTooltip('Setări autoutilitară'));
-    await tapVisible(tester, find.text('Kilometraj inițial'));
-    expect(find.text('Deblochează editarea'), findsOneWidget);
-    expect(find.text('Salvează kilometrajul'), findsNothing);
-  });
-
-  testWidgets('invalid fuel values prevent any submission', (tester) async {
-    final service = PendingService();
-    await start(
-      tester,
-      MemoryStore(profile.copyWith(startingKm: 100)),
-      service: service,
-    );
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), '99');
-    await tester.enterText(fields.at(1), '0');
-    await tester.enterText(fields.at(2), 'NaN');
-    await tapVisible(tester, find.text('Trimite datele'));
-    expect(find.text('Valoarea minimă este 100 km'), findsOneWidget);
-    expect(find.text('Introdu o valoare mai mare decât 0'), findsOneWidget);
-    expect(find.text('Introdu un număr valid'), findsOneWidget);
-    expect(service.calls, 0);
-  });
-
-  testWidgets('setup storage failure stays on setup and preserves inputs', (
-    tester,
-  ) async {
-    final store = MemoryStore()..failSave = true;
-    await start(tester, store);
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'B 123 ABC');
-    await tester.enterText(fields.at(2), 'secret');
-    await tapVisible(tester, find.text('Creează'));
-    expect(
-      find.text('Configurarea nu a putut fi salvată. Încearcă din nou.'),
-      findsOneWidget,
-    );
-    expect(store.profile, isNull);
-    expect(
-      tester.widget<TextFormField>(fields.at(0)).controller!.text,
-      'B 123 ABC',
-    );
-  });
-
   testWidgets(
-    'pending submission prevents duplicate requests and failed delivery keeps inputs',
+    'invalid-device-token clears session; failed clear is recoverable',
     (tester) async {
-      final service = PendingService();
-      await start(tester, MemoryStore(profile), service: service);
+      final secrets = MemorySecrets()
+        ..seed()
+        ..failDelete = true;
+      final server = TestServer()
+        ..intercept = (r) async =>
+            jsonResponse({'error': 'Invalid device token'}, 401);
+      await start(tester, secrets, server);
+      expect(find.text('Reîncearcă'), findsOneWidget);
+      expect(secrets.values, isNotEmpty);
+      secrets.failDelete = false;
+      await tapVisible(tester, find.text('Reîncearcă'));
+      expect(find.text('Activează'), findsOneWidget);
+      expect(secrets.values, isEmpty);
+      expect(find.textContaining('Activează din nou'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'fuel validation blocks invalid integers and precision, date/time pickers are available',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      await start(tester, secrets, server);
+      await fillFuel(tester, km: '100000', litres: '45.1234', price: '0');
+      await tapVisible(tester, find.text('Trimite datele'));
+      expect(find.textContaining('mai mare decât 100000'), findsOneWidget);
+      expect(find.textContaining('maximum 3 zecimale'), findsOneWidget);
+      expect(server.count('POST'), 0);
+      await tapVisible(tester, find.text('Data și ora alimentării'));
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      await tapVisible(tester, find.text('OK'));
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      await tapVisible(tester, find.text('OK'));
+    },
+  );
+  testWidgets(
+    'fuel POST prevents duplicates, refreshes van/history, and clears submitted fields',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      final pending = Completer<http.Response>();
+      await start(tester, secrets, server);
+      server.intercept = (r) async =>
+          r.method == 'POST' ? pending.future : null;
       await fillFuel(tester);
       await tester.ensureVisible(find.text('Trimite datele'));
       await tester.tap(find.text('Trimite datele'));
       await tester.pump();
-      expect(service.calls, 1);
-      final button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNull);
       expect(
-        tester
-            .widget<TextButton>(find.widgetWithText(TextButton, 'Deconectare'))
-            .onPressed,
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull,
       );
-      service.response.completeError(
-        const SubmissionException('Delivery failed'),
-      );
+      expect(server.count('POST'), 1);
+      server.km = 100500;
+      server.entries = [
+        {...entryJson(), 'van': vanJson(km: 100500)},
+      ];
+      pending.complete(jsonResponse(entryJson(), 201));
       await tester.pumpAndSettle();
-      expect(find.text('Delivery failed'), findsOneWidget);
-      expect(find.text('Kilometraj actual  ·  0 km'), findsOneWidget);
+      expect(find.text('Kilometraj actual  ·  100500 km'), findsOneWidget);
       expect(
-        tester
-            .widget<TextFormField>(find.byType(TextFormField).at(2))
-            .controller!
-            .text,
-        '7,25',
+        find.text('Alimentarea a fost salvată pe server.'),
+        findsOneWidget,
       );
-    },
-  );
-
-  testWidgets(
-    'confirmed submission saves current reading, clears fields and shows success',
-    (tester) async {
-      final service = PendingService();
-      final store = MemoryStore(profile);
-      await start(tester, store, service: service);
-      await fillFuel(tester);
-      await tester.ensureVisible(find.text('Trimite datele'));
-      await tester.tap(find.text('Trimite datele'));
-      await tester.pump();
-      service.response.complete(SubmissionResult.sent);
-      await tester.pumpAndSettle();
-      expect(find.text('Datele au fost trimise către server.'), findsOneWidget);
       expect(
         tester
             .widget<TextFormField>(find.byType(TextFormField).first)
@@ -344,85 +259,195 @@ void main() {
             .text,
         '',
       );
-      expect(find.text('Kilometraj actual  ·  150 km'), findsOneWidget);
-      expect(store.profile!.currentKm, 150);
-      await tester.pumpWidget(const SizedBox());
-      await start(tester, store);
-      expect(find.text('Kilometraj actual  ·  150 km'), findsOneWidget);
+      expect(server.requests.where((r) => r.method == 'GET').length, 4);
+      await tester.ensureVisible(find.text('Istoric alimentări'));
+      expect(find.textContaining('45 L'), findsOneWidget);
     },
   );
-
   testWidgets(
-    'confirmed send with failed local save preserves old reading and warns against resending',
+    'failed writes keep inputs, accepted entry with failed refresh offers read-only retry',
     (tester) async {
-      final store = MemoryStore(profile)..failSave = true;
-      final service = PendingService();
-      await start(tester, store, service: service);
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      await start(tester, secrets, server);
       await fillFuel(tester);
-      await tester.ensureVisible(find.text('Trimite datele'));
-      await tester.tap(find.text('Trimite datele'));
-      await tester.pump();
-      service.response.complete(SubmissionResult.sent);
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Nu retrimite alimentarea.'), findsOneWidget);
-      expect(find.text('Kilometraj actual  ·  0 km'), findsOneWidget);
-      expect(store.profile!.currentKm, 0);
+      server.intercept = (r) async => r.method == 'POST'
+          ? jsonResponse({
+              'error': 'Invalid request',
+              'fields': [
+                {'field': 'litres', 'message': 'Server field detail'},
+              ],
+            }, 400)
+          : null;
+      await tapVisible(tester, find.text('Trimite datele'));
+      expect(find.textContaining('Server field detail'), findsOneWidget);
       expect(
         tester
-            .widget<TextFormField>(find.byType(TextFormField).first)
+            .widget<TextFormField>(find.byType(TextFormField).at(1))
             .controller!
             .text,
-        '150',
+        '45,5',
       );
-    },
-  );
-
-  testWidgets(
-    'baseline correction failure preserves profile, successful correction preserves current reading',
-    (tester) async {
-      final store = MemoryStore(profile.copyWith(lastOdometerKm: 500));
-      await start(tester, store);
-      await tapVisible(tester, find.byTooltip('Setări autoutilitară'));
-      await tapVisible(tester, find.text('Kilometraj inițial'));
-      await tester.enterText(find.byType(TextFormField), 'secret');
-      await tapVisible(tester, find.text('Deblochează editarea'));
-      await tester.enterText(find.byType(TextFormField), '200');
-      store.failSave = true;
-      await tapVisible(tester, find.text('Salvează kilometrajul'));
+      server.intercept = (r) async => r.method == 'GET'
+          ? jsonResponse({'error': 'Unavailable'}, 503)
+          : null;
+      await tapVisible(tester, find.text('Trimite datele'));
       expect(
-        find.text(
-          'Kilometrajul inițial nu a putut fi salvat. Încearcă din nou.',
-        ),
+        find.text('Alimentarea a fost salvată pe server.'),
         findsOneWidget,
       );
-      expect(store.profile!.startingKm, 0);
-      expect(
-        tester
-            .widget<TextFormField>(find.byType(TextFormField))
-            .controller!
-            .text,
-        '200',
-      );
-      store.failSave = false;
-      await tapVisible(tester, find.text('Salvează kilometrajul'));
-      expect(store.profile!.startingKm, 200);
-      expect(find.text('Kilometraj actual  ·  500 km'), findsOneWidget);
+      expect(find.text('Reîmprospătează datele'), findsOneWidget);
+      expect(find.text('Kilometraj actual  ·  100000 km'), findsOneWidget);
+      server.intercept = null;
+      await tapVisible(tester, find.text('Reîmprospătează datele'));
+      expect(find.text('Kilometraj actual  ·  100500 km'), findsOneWidget);
+      expect(server.count('POST'), 2);
     },
   );
-
+  testWidgets('monthly selectors query exact month/year and show empty state', (
+    tester,
+  ) async {
+    final secrets = MemorySecrets()..seed();
+    final server = TestServer();
+    await start(tester, secrets, server);
+    expect(
+      find.text('Nu există alimentări în luna selectată.'),
+      findsOneWidget,
+    );
+    final month = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<int> && w.decoration.labelText == 'Lună',
+    );
+    await tester.ensureVisible(month);
+    await tester.tap(month);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('2').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2').last);
+    await tester.pumpAndSettle();
+    expect(server.requests.last.url.queryParameters['month'], '2');
+    final year = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<int> && w.decoration.labelText == 'An',
+    );
+    await tester.tap(year);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('2025').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2025').last);
+    await tester.pumpAndSettle();
+    expect(server.requests.last.url.queryParameters, {
+      'month': '2',
+      'year': '2025',
+    });
+  });
+  testWidgets(
+    'wrong plate password keeps session; success saves returned plate without token rotation',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      await start(tester, secrets, server);
+      await openPlate(tester);
+      await fillPlate(tester);
+      server.intercept = (r) async => r.method == 'PUT'
+          ? jsonResponse({'error': 'Wrong admin password'}, 401)
+          : null;
+      await tapVisible(tester, find.text('Salvează numărul'));
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(secrets.values, isNotEmpty);
+      final password = find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(TextFormField),
+          )
+          .last;
+      expect(tester.widget<TextFormField>(password).controller!.text, '');
+      server.intercept = null;
+      await tester.enterText(password, 'entered password');
+      await tapVisible(tester, find.text('Salvează numărul'));
+      expect(find.text('B456XYZ'), findsOneWidget);
+      final session = await secrets.store.load();
+      expect(session!.plate, 'B456XYZ');
+      expect(session.token, testToken);
+      expect(
+        server.requests.any((r) => r.url.path.endsWith('/vans/B456XYZ')),
+        isTrue,
+      );
+    },
+  );
+  testWidgets(
+    'plate-change persistence failure retries storage without repeating PUT',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      await start(tester, secrets, server);
+      await openPlate(tester);
+      await fillPlate(tester);
+      secrets.failWrite = true;
+      await tapVisible(tester, find.text('Salvează numărul'));
+      expect(find.textContaining('doar salvarea locală'), findsOneWidget);
+      secrets.failWrite = false;
+      await tapVisible(tester, find.text('Reîncearcă'));
+      expect(find.text('B456XYZ'), findsOneWidget);
+      expect(server.count('PUT'), 1);
+    },
+  );
+  testWidgets(
+    'invalid token in plate dialog closes dialog and returns to activation',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      await start(tester, secrets, server);
+      await openPlate(tester);
+      await fillPlate(tester);
+      server.intercept = (r) async =>
+          jsonResponse({'error': 'Invalid device token'}, 401);
+      await tapVisible(tester, find.text('Salvează numărul'));
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Activează'), findsOneWidget);
+      expect(secrets.values, isEmpty);
+    },
+  );
+  testWidgets(
+    'local sign-out explains token remains valid and clears secure session',
+    (tester) async {
+      final secrets = MemorySecrets()..seed();
+      final server = TestServer();
+      await start(tester, secrets, server);
+      await tapVisible(tester, find.text('Deconectare locală'));
+      expect(find.textContaining('nu este revocat'), findsOneWidget);
+      secrets.failDelete = true;
+      await tapVisible(tester, find.text('Deconectează'));
+      expect(
+        find.textContaining('Deconectarea locală nu a reușit'),
+        findsOneWidget,
+      );
+      expect(secrets.values, isNotEmpty);
+      secrets.failDelete = false;
+      await tapVisible(tester, find.text('Deconectare locală'));
+      await tapVisible(tester, find.text('Deconectează'));
+      expect(find.text('Activează'), findsOneWidget);
+      expect(secrets.values, isEmpty);
+      expect(server.count('POST'), 0);
+      await tester.pumpWidget(const SizedBox());
+      await start(tester, secrets, server);
+      expect(find.text('Activează'), findsOneWidget);
+    },
+  );
   for (final width in [320.0, 1440.0]) {
-    testWidgets('setup and home fit width $width', (tester) async {
-      tester.view.physicalSize = Size(width, 900);
+    testWidgets('activation/home/plate dialog fit $width', (tester) async {
+      tester.view.physicalSize = Size(width, 1000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await start(tester, MemoryStore());
+      final secrets = MemorySecrets();
+      final server = TestServer();
+      await start(tester, secrets, server);
       expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-      await start(tester, MemoryStore(profile));
+      await fillActivation(tester);
+      await tapVisible(tester, find.text('Activează'));
       expect(tester.takeException(), isNull);
-      await tapVisible(tester, find.byTooltip('Setări autoutilitară'));
-      await tapVisible(tester, find.text('Modifică numărul de înmatriculare'));
+      await openPlate(tester);
       expect(tester.takeException(), isNull);
     });
   }

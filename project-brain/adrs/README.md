@@ -7,6 +7,8 @@ Record consequential choices about architecture, infrastructure, data, dependenc
 | [ADR-001](ADR-001-project-brain.md) | accepted | Four-folder Markdown project brain |
 | [ADR-002](ADR-002-flutter-client.md) | accepted | Flutter Android/web client, local setup, and replaceable submission adapter |
 
+| [ADR-003](ADR-003-api-session.md) | accepted | Express API and secure device session replace local prototype authentication |
+
 ## New ADR format
 
 Use `ADR-<number>-<short-title>.md` and include:

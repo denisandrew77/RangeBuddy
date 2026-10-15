@@ -8,6 +8,8 @@ Record what we agree the project must do and why. Product specs describe behavio
 | [Driver app](driver-app.md) | Van setup, fuel entries, protected plate editing, and platform requirements |
 | [Android development](android-development.md) | Local Android toolchain, VS Code configuration, and APK verification |
 
+| [API integration](api-integration.md) | Express contract, activation, secure device session, fuel history, errors |
+
 ## New spec format
 
 Use a descriptive filename such as `<domain>.md`. Include only sections that add useful context:

@@ -39,3 +39,5 @@ List Android devices through adb and Flutter. If an authorized phone is present,
 | SC-ANDROID-003 | blocked on device | Both Flutter and adb device listings show no Android phone. No emulator or system image is installed, per the user's explicit constraint. User must connect a USB-debugging-enabled phone and approve the computer before installation/launch can be verified. |
 
 Artifact: [Debug APK](../../build/app/outputs/flutter-apk/app-debug.apk). VS Code: [Launch configurations](../../.vscode/launch.json), [Build tasks](../../.vscode/tasks.json), [Workspace settings](../../.vscode/settings.json).
+
+2026-10-15 compilation follow-up (SC-ANDROID-001): the API-integrated debug APK built successfully with flutter_secure_storage 11.2.0. Plugin compilation automatically installed project-local Android Platform 35 and CMake 3.22.1. Physical-device execution and secure-storage runtime remain not run; this is build evidence only.
