@@ -1,7 +1,7 @@
 # Android development scenarios
 
 Source: [Android development](../specs/android-development.md)
-Updated: 2026-10-14
+Updated: 2026-10-15
 All definitions ready. Implementation and execution evidence are recorded below.
 
 ## SC-ANDROID-001 — Android toolchain builds the client
@@ -22,6 +22,13 @@ Covers: R-ANDROID-003
 
 List Android devices through adb and Flutter. If an authorized phone is present, install/launch the debug client. Otherwise record the missing device or authorization and the required user-side action; do not claim a device run.
 
+## SC-ANDROID-004 — Generate a release APK
+
+Covers: R-ANDROID-004
+Definition: ready | Implementation: built | Verification: passed (release build/resource/signature checks)
+
+Run `./tool/flutterw build apk --release --no-pub`. Expect an APK at `build/app/outputs/flutter-apk/app-release.apk`, DENICAR application label, correct package/version, no debuggable application flag, and a valid APK signature. Inspect the signer and explicitly distinguish the current debug signing certificate from production signing. Compilation does not verify real API connectivity or device runtime.
+
 ## Coverage
 
 | Requirement | Scenarios |
@@ -29,6 +36,7 @@ List Android devices through adb and Flutter. If an authorized phone is present,
 | R-ANDROID-001 | SC-ANDROID-001 |
 | R-ANDROID-002 | SC-ANDROID-002 |
 | R-ANDROID-003 | SC-ANDROID-001, SC-ANDROID-003 |
+| R-ANDROID-004 | SC-ANDROID-004 |
 
 ## Verification evidence — 2026-10-14
 
@@ -41,3 +49,5 @@ List Android devices through adb and Flutter. If an authorized phone is present,
 Artifact: [Debug APK](../../build/app/outputs/flutter-apk/app-debug.apk). VS Code: [Launch configurations](../../.vscode/launch.json), [Build tasks](../../.vscode/tasks.json), [Workspace settings](../../.vscode/settings.json).
 
 2026-10-15 compilation follow-up (SC-ANDROID-001): the API-integrated debug APK built successfully with flutter_secure_storage 11.2.0. Plugin compilation automatically installed project-local Android Platform 35 and CMake 3.22.1. Physical-device execution and secure-storage runtime remain not run; this is build evidence only.
+
+2026-10-15 — SC-ANDROID-004 passed: `./tool/flutterw build apk --release --no-pub` generated [Release APK](../../build/app/outputs/flutter-apk/app-release.apk) (55719361 bytes). `aapt dump badging` and an executed assertion confirm DENICAR, version 0.1.0+1 and no application-debuggable flag. Manifest inspection confirms backup disabled. `apksigner verify --verbose --print-certs` verifies APK v2 signing and identifies `CN=Android Debug`. This is an optimized release build signed with the existing debug key; production signing/distribution and physical-device runtime remain unverified.
